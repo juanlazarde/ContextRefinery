@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "doc-preprocessor"
+version = "0.1.0"
+description = "Deterministic document preprocessing pipeline for LLM input optimization"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "ContextRefinery" }]
+dependencies = []
+
+[project.optional-dependencies]
+compression = ["llmlingua"]
+pdf = ["markitdown", "pymupdf"]
+
+[project.scripts]
+doc-preprocess = "doc_preprocessor.main:cli"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["doc_preprocessor*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
