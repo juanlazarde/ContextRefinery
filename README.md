@@ -1,42 +1,163 @@
 # doc-preprocessor
 
-Deterministic-first document preprocessing pipeline for LLM input optimization.
+## Overview
 
-## Features
-- Ingest `.md`, `.txt`, `.pdf`
-- Deterministic cleaning with audit trail
-- Heading-aware chunking with safe max-token split behavior
-- Approximate token estimation (`ceil(len(text)/4)`)
-- Optional LLMLingua compression (per chunk)
-- CLI and installable console script
+`doc-preprocessor` prepares documents before you send them to an LLM.
+
+It is designed to:
+
+- reduce token usage,
+- keep structure (headings, sections, tables),
+- keep an audit trail of what changed,
+- run on one file or many files.
+
+Supported input formats:
+
+- `.md`
+- `.txt`
+- `.pdf`
 
 ## Install
+
+Base install (markdown and text processing only):
 
 ```bash
 pip install -e .
 ```
 
-Optional extras:
+With PDF support:
 
 ```bash
-pip install -e .[pdf]
-pip install -e .[compression]
+pip install -e ".[pdf]"
 ```
 
-## Usage
+With optional compression:
 
 ```bash
-python preprocess.py input.pdf --compress --target_tokens 2000
-# or
-
-doc-preprocess input.pdf --compress --target_tokens 2000
+pip install -e ".[pdf,compression]"
 ```
 
-## Output artifacts
-For `input.pdf`:
-- `input.extracted.md`
+Everything:
+
+```bash
+pip install -e ".[all]"
+```
+
+## Quick Start
+
+Process one file:
+
+```bash
+doc-preprocess input.md
+```
+
+Default output:
+
 - `input.cleaned.md`
-- `input.chunks.json`
-- `input.report.json`
 
-Use `--dry-run` to avoid writing files.
+Write all artifacts:
+
+```bash
+doc-preprocess input.md --all-artifacts
+```
+
+## Output Files
+
+When `--all-artifacts` is enabled, the tool writes:
+
+- `input.extracted.md` (raw extracted text)
+- `input.cleaned.md` (deterministically cleaned text)
+- `input.chunks.json` (structure-aware chunks)
+- `input.report.json` (metrics, logs, warnings, audit data)
+- `input.diff.md` (line-by-line diff: extracted vs cleaned)
+
+## Batch Processing
+
+Process a directory:
+
+```bash
+doc-preprocess --input-dir ./docs --pattern "**/*" --workers 4
+```
+
+Process explicit files:
+
+```bash
+doc-preprocess a.md b.txt c.pdf --workers 4
+```
+
+Batch report:
+
+- `batch_report.json`
+
+## Skills Pre-Run Hook
+
+Use the hook when a Codex or Claude skill needs cleaned document inputs before it runs.
+
+Process declared files:
+
+```bash
+doc-preprocess-hook notes.md transcript.pdf
+```
+
+Process a directory:
+
+```bash
+doc-preprocess-hook ./docs --pattern "**/*"
+```
+
+Default hook output:
+
+- cleaned files
+- `hook_summary.json`
+
+The hook skips generated files such as `*.cleaned.md`, `*.chunks.json`, `*.report.json`, `*.extracted.md`, `*.diff.md`, and anything inside `.doc_preprocessor/`.
+
+Use `--require-all-success` when a skill should stop if any declared input fails.
+
+## Common Flags
+
+- `--all-artifacts`: write full artifact set
+- `--dry-run`: run processing but write no files
+- `--out-dir PATH`: set output directory
+- `--compress`: enable per-chunk compression
+- `--target-tokens N`: target token budget for compression
+- `--compression-ratio R`: compression ratio hint
+- `--max-chunk-tokens N`: max tokens per chunk before safe splitting
+- `--fail-fast`: best-effort early stop in batch mode
+- `--require-all-success`: hook mode returns failure if any declared input fails
+- `--max-file-mb N`: skip files larger than N MB in batch mode
+- `--aggressive-clean`: stronger deterministic cleanup
+- `--log-level LEVEL`: logging level (`DEBUG`, `INFO`, `WARNING`, ...)
+
+Dependency flags:
+
+- `--auto-install-deps`: opt in to allowlisted runtime dependency install + retry
+- `--no-auto-install-deps`: hard-disable runtime dependency install
+
+If both dependency flags are passed, CLI exits with code `2`.
+
+## Exit Codes
+
+- `0`: all files succeeded
+- `1`: one or more files failed
+- `2`: invalid CLI input/config
+
+## Troubleshooting
+
+If PDF processing fails, install (or reinstall) dependencies:
+
+```bash
+pip install markitdown pymupdf
+```
+
+If compression fails, install:
+
+```bash
+pip install llmlingua
+```
+
+For full flag help:
+
+```bash
+doc-preprocess --help
+```

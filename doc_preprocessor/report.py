@@ -17,10 +17,13 @@ class PipelineReport:
     extracted_tokens: int
     cleaned_tokens: int
     compressed_tokens: int | None
-    cleaning_reduction_percent: float
+    cleaning_reduction_percent: float | None
     total_reduction_percent: float | None
     chunks: int
     removed: dict
+    processing_log: list[str]
+    timings_ms: dict
+    dependency_events: list[dict]
     pre_compression_tokens: int | None = None
     post_compression_tokens: int | None = None
     compression_ratio_actual: float | None = None
@@ -41,6 +44,9 @@ class PipelineReport:
             "total_reduction_percent": self.total_reduction_percent,
             "chunks": self.chunks,
             "removed": self.removed,
+            "processing_log": self.processing_log,
+            "timings_ms": self.timings_ms,
+            "dependency_events": self.dependency_events,
             "pre_compression_tokens": self.pre_compression_tokens,
             "post_compression_tokens": self.post_compression_tokens,
             "compression_ratio_actual": self.compression_ratio_actual,

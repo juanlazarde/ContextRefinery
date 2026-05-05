@@ -36,3 +36,7 @@ htmlcov/
 
 # Local artifacts
 *.log
+
+# Pipeline outputs
+outputs/
+.doc_preprocessor/

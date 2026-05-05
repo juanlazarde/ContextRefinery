@@ -12,11 +12,13 @@ authors = [{ name = "ContextRefinery" }]
 dependencies = []
 
 [project.optional-dependencies]
-compression = ["llmlingua"]
 pdf = ["markitdown", "pymupdf"]
+compression = ["llmlingua"]
+all = ["markitdown", "pymupdf", "llmlingua"]
 
 [project.scripts]
 doc-preprocess = "doc_preprocessor.main:cli"
+doc-preprocess-hook = "doc_preprocessor.hooks:cli"
 
 [tool.setuptools]
 include-package-data = true

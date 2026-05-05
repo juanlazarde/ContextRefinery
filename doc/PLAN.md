@@ -1,88 +1,116 @@
-# Final Revised Plan: `doc_preprocessor`
+# Implementation Plan and Current State: `doc_preprocessor`
 
 ## Summary
-Build an installable Python package for deterministic-first document preprocessing before LLM usage, with optional LLMLingua compression, strong auditability, and a single CLI for `.md`, `.txt`, and `.pdf`.
+`doc_preprocessor` is implemented as a deterministic-first preprocessing package for LLM input optimization, with:
+- single-file and batch processing,
+- conservative deterministic cleaning,
+- structure-aware chunking,
+- optional compression,
+- audit/report artifacts,
+- production-oriented repo scaffolding (tests, CI, contribution templates).
 
-## Package Structure
-- `doc_preprocessor/__init__.py`
+This document reflects what is actually implemented in the repository right now.
+
+## Package and Runtime Layout
+Core Python package:
 - `doc_preprocessor/ingest.py`
 - `doc_preprocessor/clean.py`
 - `doc_preprocessor/chunk.py`
 - `doc_preprocessor/estimate.py`
 - `doc_preprocessor/compress.py`
+- `doc_preprocessor/deps.py`
+- `doc_preprocessor/hooks.py`
 - `doc_preprocessor/report.py`
 - `doc_preprocessor/main.py`
-- `preprocess.py`
+- `doc_preprocessor/__init__.py`
+
+Entry points:
+- console script: `doc-preprocess` via `pyproject.toml`
+- console script: `doc-preprocess-hook` via `pyproject.toml`
+
+Packaging/test metadata:
 - `pyproject.toml`
 - `README.md`
+- `AGENTS.md`
+- `CLAUDE.md`
+- `SKILL.md`
 - `tests/`
 
 ## Public API
-Expose from `doc_preprocessor/__init__.py`:
+Exported from package root:
 - `run_pipeline`
+- `run_pipeline_batch`
 - `PipelineOptions`
 - `PipelineResult`
+- `BatchOptions`
+- `BatchResult`
+- `FileFailure`
+- `SkillPreRunOptions`
+- `SkillPreRunResult`
+- `preprocess_for_skill`
 
-### `PipelineOptions`
-- `compress: bool`
-- `target_tokens: int | None`
-- `compression_ratio: float | None`
-- `max_chunk_tokens: int | None`
-- `dry_run: bool`
-- `out_dir: Path | None`
-- `log_level: str`
-- `aggressive_clean: bool`
+### Data models in use
+- `PipelineOptions`
+  - `compress`, `target_tokens`, `compression_ratio`, `max_chunk_tokens`
+  - `dry_run`, `out_dir`, `log_level`, `aggressive_clean`
+  - `all_artifacts`
+  - `output_stem`
+  - `auto_install_deps`
+- `PipelineResult`
+  - `input_path`, `ingest_result`, `clean_result`, `chunks`, `report`, `written_files`
+- `BatchOptions`
+  - `input_dir`, `pattern`, `recursive`, `workers`
+  - `continue_on_error`, `ordered_results`, `max_file_mb`
+- `BatchResult`
+  - `total_files`, `succeeded`, `failed`, `results`, `duration_ms`, `files_per_sec`
+- `FileFailure`
+  - `path`, `error`, `dependency_events`
+- `SkillPreRunOptions`
+  - `out_dir`, `all_artifacts`, `compress`, `target_tokens`, `compression_ratio`
+  - `max_chunk_tokens`, `workers`, `fail_fast`, `max_file_mb`
+  - `require_all_success`, `pattern`, `aggressive_clean`, `auto_install_deps`, `dry_run`
+- `SkillPreRunResult`
+  - `run_id`, `summary_path`, `cleaned_paths`, `failures`, `succeeded`, `failed`, `artifact_root`, `ok`
 
-### `PipelineResult`
-- `ingest_result`
-- `clean_result`
-- `chunks`
-- `report`
-- `written_files`
-
-## Ingestion
-Implement `DocumentIngestor.load(path: Path) -> IngestResult`.
-
+## Ingestion and Dependencies
 Supported inputs:
-- `.md`, `.txt`: direct read
-- `.pdf`: internal conversion with fallback order:
-  1. MarkItDown (defensive import handling)
-  2. PyMuPDF (`fitz`)
-  3. If neither available, raise:
+- `.md`, `.txt`, `.pdf`
 
-`PDF support requires MarkItDown or PyMuPDF. Install with: pip install markitdown pymupdf`
+PDF backend order:
+1. MarkItDown
+2. PyMuPDF (`fitz`)
+3. explicit failure message if unavailable
 
-No OCR in v1.
+Dependency installation model:
+- Primary model is upfront install from `pyproject.toml` (`pip install -e .`).
+- Runtime remediation exists as opt-in control:
+  - `--auto-install-deps` enables allowlisted self-healing
+  - `--no-auto-install-deps` hard-disables it
+- conflict handling:
+  - passing both flags returns exit code `2` with an explicit error.
 
-Track extraction metadata:
-- `source_format`
-- `extraction_backend`
-- `warnings`
-- `extracted_chars`
-- `extracted_non_whitespace_chars`
-- `extracted_pages` (if available)
-- `extraction_warnings`
+Allowlisted runtime remediation mapping:
+- `fitz -> pymupdf`
+- `pymupdf -> pymupdf`
+- `markitdown -> markitdown`
+- `llmlingua -> llmlingua`
 
-If extracted text is very small, warn:
-- `PDF may be scanned/image-based. OCR not enabled.`
+Runtime install execution:
+- `sys.executable -m pip install <package>`
+- process-wide lock + shared registry for attempted/success/failed packages
+- one retry per affected file
+- dry-run never installs; records "would install" event
 
-## Deterministic Cleaning
-Implement `DocumentCleaner.clean(text) -> CleanResult`.
+## Deterministic Processing Pipeline
+### Cleaning (`clean.py`)
+Implemented deterministic rules:
+- normalize whitespace and line endings
+- remove page numbers
+- conservative repeated header/footer removal
+- duplicate paragraph removal (hash-based)
+- noise/empty-line handling while preserving structure
 
-Rules:
-- Normalize whitespace and line endings
-- Remove page numbers (regex-based)
-- Remove repeated headers/footers conservatively (default)
-- Remove duplicate paragraphs (hash-based, preserve order)
-- Remove empty/noise lines
-- Preserve headings/tables/numbers/names/structure
-
-Modes:
-- Default conservative mode
-- Optional `--aggressive-clean`
-
-## Loss Audit
-`CleanResult.removed` includes:
+Loss audit includes:
 - `page_numbers_count`
 - `duplicate_paragraphs_count`
 - `repeated_headers`
@@ -91,109 +119,140 @@ Modes:
 - `duplicate_paragraph_samples`
 - `warnings`
 
-## Chunking
-Implement `MarkdownChunker.chunk(text) -> list[Chunk]`.
+### Chunking (`chunk.py`)
+- headings: `#`, `##`, `###`
+- pre-heading content mapped to `Preamble`
+- safe optional split via `max_chunk_tokens`
+- no mid-table split; warning for unsplittable oversized block
 
-Rules:
-- Detect `#`, `##`, `###`
-- One chunk per section
-- Pre-heading content becomes `Preamble`
-- Chunk fields: `id`, `heading`, `text`, `estimated_tokens`
-
-Optional size control:
-- `--max-chunk-tokens`
-- Split only at paragraph/table boundaries
-- Never split mid-table or mid-sentence
-- If a single block exceeds max, keep intact and warn:
-
-`Chunk exceeds max because a single block could not be safely split.`
-
-## Token Estimation
-Implement `TokenEstimator.estimate(text: str) -> int`:
+### Token Estimation (`estimate.py`)
 - `ceil(len(text)/4)`
 
-Track:
-- `extracted_tokens`
-- `cleaned_tokens`
-- `compressed_tokens` (if used)
+### Optional Compression (`compress.py`)
+- only when `--compress`
+- per-chunk compression
+- reports compression metrics
 
-## Optional Compression
-Implement `LLMCompressor`.
+## Output Semantics
+Default per-file output:
+- only `*.cleaned.md`
 
-Behavior:
-- Active only with `--compress`
-- Compress per chunk
-- Options: `--target_tokens`, `--compression_ratio`
-- No auto-install
-- If missing dependency, raise:
+With `--all-artifacts`:
+- `*.extracted.md`
+- `*.cleaned.md`
+- `*.chunks.json`
+- `*.report.json`
+- `*.diff.md`
 
-`LLMLingua not installed. Run: pip install llmlingua`
+`report.json` includes:
+- extraction metadata
+- token metrics and reduction percentages
+- chunk count
+- cleaning loss audit
+- `processing_log`
+- `timings_ms`
+- `dependency_events`
 
-Compression metrics:
-- `pre_compression_tokens`
-- `post_compression_tokens`
-- `compression_ratio_actual`
+## Batch Processing
+Execution model:
+- `ThreadPoolExecutor` whole-file parallelism
 
-## Output Artifacts
-For `input.pdf`, write:
-- `input.extracted.md`
-- `input.cleaned.md`
-- `input.chunks.json`
-- `input.report.json`
+Input modes:
+- `--input-dir` + `--pattern`
+- multiple explicit file paths
 
-Report includes:
-- Source/extraction metadata
-- Extraction quality metrics
-- Token metrics
-- Reduction percentages:
-  - `cleaning_reduction_percent`
-  - `total_reduction_percent` (if compression enabled)
-- Chunk count
-- Full removal audit
+Fail-fast behavior:
+- best-effort (stop scheduling + cancel pending; running tasks may complete)
+- report always includes terminal status for every discovered file
 
-## CLI
-Commands:
-- `python preprocess.py input.pdf --compress --target_tokens 2000`
-- `doc-preprocess input.pdf --compress --target_tokens 2000`
+Batch report:
+- `batch_report.json` with totals, duration, throughput, failures, and per-file result rows
 
-Flags:
-- `--compress`
-- `--target_tokens`
-- `--compression_ratio`
-- `--max-chunk-tokens`
-- `--dry-run`
-- `--log-level`
-- `--out-dir`
-- `--aggressive-clean`
+### Collision-safe batch naming (implemented)
+To avoid overwrites when files share stem names:
+- batch stem defaults to `<stem>__<ext>` (e.g., `test__md`, `test__pdf`)
+- if still colliding, suffix with stable hash: `<stem>__<ext>__<hash8>`
+- single-file naming remains unchanged
 
-Behavior:
-- `--dry-run` writes nothing
-- Always print token savings summary
+## Skills Pre-Run Hook
+The repository includes a hook layer for Codex and Claude skill workflows:
+- API: `preprocess_for_skill(inputs, options)`
+- CLI: `doc-preprocess-hook`
+- Codex instruction artifact: `AGENTS.md`
+- Claude Code instruction artifact: `CLAUDE.md`
+- packaged Claude Skill instruction artifact: `SKILL.md`
 
-## Packaging
-`pyproject.toml` includes:
-- optional deps:
-  - `compression = ["llmlingua"]`
-  - `pdf = ["markitdown", "pymupdf"]`
-- console script:
-  - `doc-preprocess = "doc_preprocessor.main:cli"`
+Hook behavior:
+- accepts mixed explicit files and directories
+- classifies every input before execution
+- directories use pattern-based discovery
+- files use the existing single/batch pipeline path
+- writes outputs under `.doc_preprocessor/skill_runs/<run_id>/` by default
+- writes `hook_summary.json` for skill routing
 
-## Test Plan
-Unit tests:
-- cleaning normalization/page-number removal/header-footer/dedup/audit
-- chunk heading parsing/preamble/safe splitting/oversize warning
-- token estimator correctness
+Skip rules:
+- skip `*.cleaned.md`
+- skip `*.chunks.json`
+- skip `*.report.json`
+- skip `*.extracted.md`
+- skip `*.diff.md`
+- skip `batch_report.json`
+- skip anything inside `.doc_preprocessor/`
 
-PDF ingestion tests:
-- MarkItDown path
-- `fitz` fallback path
-- both missing exact error
+Stable run IDs:
+- format: `<timestamp>_<hash8>`
+- hash is derived from normalized input paths and hook options
 
-Integration tests:
-- end-to-end `.md/.txt/.pdf`
-- output/report validation
-- `--dry-run` no writes
+Hook summary fields:
+- `run_id`
+- `input_count`
+- `succeeded`
+- `failed`
+- `cleaned_paths`
+- `warnings`
+- `failures`
+- `artifact_root`
+- `options_used`
 
-Compression tests:
-- missing dependency exact failure
-- enabled path metrics validation
+Failure behavior:
+- partial success is allowed by default
+- `require_all_success=True` marks the hook result as failed when any input fails
+
+`AGENTS.md`, `CLAUDE.md`, and `SKILL.md` document the same pre-run contract so Codex agents, Claude Code, and packaged Claude Skills can run the hook consistently. They include the default commands, hook contract, input selection rules, failure policy, safety defaults, and Python wrapper examples.
+
+Compatibility rules:
+- `AGENTS.md` is the repo-level instruction file for Codex-style agents.
+- `CLAUDE.md` is the repo-level instruction file for Claude Code.
+- `SKILL.md` is the portable Claude Skill instruction artifact.
+- Keep all three aligned when changing hook behavior.
+- Copy the pre-run section into `SKILL.md` when packaging this as a Claude Skill.
+
+## CLI Contract
+Main flags implemented:
+- `--input-dir`, `--pattern`, `--workers`, `--fail-fast`, `--max-file-mb`
+- `--compress`, `--target-tokens`, `--compression-ratio`, `--max-chunk-tokens`
+- `--dry-run`, `--out-dir`, `--log-level`, `--aggressive-clean`
+- `--all-artifacts`
+- `--auto-install-deps`, `--no-auto-install-deps`
+- hook-specific: `doc-preprocess-hook ... --require-all-success`
+
+Exit codes:
+- `0`: success
+- `1`: one or more processing failures
+- `2`: invalid CLI/config
+
+## Repository Tooling and Governance
+Implemented repo support files:
+- `AGENTS.md` (agent/skill pre-run hook instructions)
+- `CLAUDE.md` (Claude Code pre-run hook instructions)
+- `SKILL.md` (portable Claude Skill pre-run hook instructions)
+- `.github/workflows/ci.yml` (pytest CI)
+- issue templates (`bug_report`, `feature_request`, `config.yml`)
+- PR template
+- `CODEOWNERS`
+- `CONTRIBUTING.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md`, `LICENSE`
+- `.gitignore`, `.editorconfig`, `CHANGELOG.md`
+
+## Validation Status
+- Test suite is implemented and passing locally.
+- Current status: `46 passed`.

@@ -52,7 +52,7 @@ class DocumentIngestor:
         warnings: list[str] = []
         extraction_warnings: list[str] = []
         extracted_chars = len(text)
-        non_ws_chars = len("".join(text.split()))
+        non_ws_chars = sum(1 for ch in text if not ch.isspace())
         if source_format == "pdf" and non_ws_chars < 200:
             msg = "PDF may be scanned/image-based. OCR not enabled."
             warnings.append(msg)
@@ -142,6 +142,6 @@ class DocumentIngestor:
         for name in module_names:
             try:
                 return importlib.import_module(name)
-            except Exception:
+            except ImportError:
                 continue
         return None
