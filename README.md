@@ -169,7 +169,7 @@ Use `--require-all-success` when a skill should stop if any declared input fails
 - `--max-chunk-tokens N`: max tokens per chunk before safe splitting
 - `--fail-fast`: best-effort early stop in batch mode
 - `--require-all-success`: hook mode returns failure if any declared input fails
-- `--max-file-mb N`: skip files larger than N MB in batch mode
+- `--max-file-mb N`: skip files larger than N MB in batch mode (`0` rejects all non-empty files)
 - `--aggressive-clean`: stronger deterministic cleanup
 - `--log-level LEVEL`: logging level (`DEBUG`, `INFO`, `WARNING`, ...)
 
