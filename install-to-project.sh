@@ -8,9 +8,19 @@
 
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SKILL_SRC="$SCRIPT_DIR/SKILL.md"
+REPO="juanlazarde/ContextRefinery"
+RAW_BASE="https://raw.githubusercontent.com/$REPO/main"
+PACKAGE_URL="git+https://github.com/$REPO.git"
 SKILL_DEST="$HOME/.claude/skills/doc-preprocess.md"
+
+# Detect whether we're running from a real file (local) or piped via curl (remote)
+if [[ -n "${BASH_SOURCE[0]:-}" && -f "${BASH_SOURCE[0]}" ]]; then
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    SKILL_SRC="$SCRIPT_DIR/SKILL.md"
+    REMOTE_MODE=false
+else
+    REMOTE_MODE=true
+fi
 
 # ---------- helpers -----------------------------------------------------------
 
@@ -44,11 +54,17 @@ fi
 
 step "Installing CLI tools globally via uv tool"
 
+if [[ "$REMOTE_MODE" == true ]]; then
+    PKG_SRC="${PACKAGE_URL}[pdf]"
+else
+    PKG_SRC="${SCRIPT_DIR}[pdf]"
+fi
+
 if command -v uv &>/dev/null; then
-    uv tool install --reinstall "$SCRIPT_DIR[pdf]" && green "Installed with uv tool (pdf support)"
+    uv tool install --reinstall "$PKG_SRC" && green "Installed with uv tool (pdf support)"
 elif command -v pip &>/dev/null; then
     yellow "uv not found — falling back to pip install --user"
-    pip install --user "$SCRIPT_DIR[pdf]" && green "Installed with pip"
+    pip install --user "$PKG_SRC" && green "Installed with pip"
 else
     red "Neither uv nor pip found. Install uv (https://docs.astral.sh/uv/) and retry."
     exit 1
@@ -66,8 +82,13 @@ fi
 step "Installing Claude Code skill to ~/.claude/skills/"
 
 mkdir -p "$(dirname "$SKILL_DEST")"
-cp "$SKILL_SRC" "$SKILL_DEST"
-green "Skill installed: $SKILL_DEST"
+if [[ "$REMOTE_MODE" == true ]]; then
+    curl -fsSL "$RAW_BASE/SKILL.md" -o "$SKILL_DEST"
+    green "Skill fetched and installed: $SKILL_DEST"
+else
+    cp "$SKILL_SRC" "$SKILL_DEST"
+    green "Skill installed: $SKILL_DEST"
+fi
 
 # ---------- step 3: inject project-level agent instructions -------------------
 

@@ -37,6 +37,22 @@ doc-preprocess input.md --out-dir .
 
 ## Install
 
+### One-liner (curl)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/juanlazarde/ContextRefinery/main/install-to-project.sh | bash
+```
+
+This installs the CLI tools globally (via `uv tool`) and wires the pre-run hook into the current directory. For global-only (no project wiring):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/juanlazarde/ContextRefinery/main/install-to-project.sh | bash -s -- --global
+```
+
+> **Requires:** the repo is public on GitHub and `uv` or `pip` is on your PATH. `curl` is pre-installed on macOS and most Linux distros.
+
+### From a local clone
+
 Base install (markdown and text processing only):
 
 ```bash
