@@ -110,7 +110,7 @@ result = preprocess_for_skill(
     SkillPreRunOptions(
         out_dir=Path(".skill_work/preprocessed"),
         workers=4,
-        max_file_mb=100,
+        max_file_mb=100,  # use 0 to reject all non-empty files
         require_all_success=False,
     ),
 )
