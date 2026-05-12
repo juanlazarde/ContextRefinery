@@ -1,223 +1,152 @@
 # doc-preprocessor
 
-## Overview
+Clean up documents before sending them to an LLM — fewer tokens, same structure, full audit trail.
 
-`doc-preprocessor` prepares documents before you send them to an LLM.
+Works on `.md`, `.txt`, and `.pdf` files. Runs on one file or hundreds.
 
-It is designed to:
-
-- reduce token usage,
-- keep structure (headings, sections, tables),
-- keep an audit trail of what changed,
-- run on one file or many files.
-
-Supported input formats:
-
-- `.md`
-- `.txt`
-- `.pdf`
-
-## Breaking Changes
-
-### 0.2.0
-
-**Default single-file output directory changed.**
-Output files now go to `<input_parent>/outputs/` instead of next to the input file.
-
-```bash
-# Before 0.2.0 — output appeared next to the input:
-# input.md → input.cleaned.md
-
-# From 0.2.0 — output goes to outputs/:
-# input.md → outputs/input.cleaned.md
-
-# To restore the old behavior:
-doc-preprocess input.md --out-dir .
-```
+---
 
 ## Install
 
-### One-liner (curl)
+**The fastest way** — run this in your project directory:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/juanlazarde/ContextRefinery/main/install-to-project.sh | bash
 ```
 
-This installs the CLI tools globally (via `uv tool`) and wires the pre-run hook into the current directory. For global-only (no project wiring):
+This installs the CLI and wires the pre-run hook into your project's `CLAUDE.md` and `AGENTS.md` so AI agents automatically preprocess documents before reading them.
+
+**Global only** (no project wiring):
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/juanlazarde/ContextRefinery/main/install-to-project.sh | bash -s -- --global
 ```
 
-> **Requires:** the repo is public on GitHub and `uv` or `pip` is on your PATH. `curl` is pre-installed on macOS and most Linux distros.
+**From a local clone:**
 
-### From a local clone
+| What you want | Command |
+|---|---|
+| Markdown + text only | `pip install -e .` |
+| + PDF support | `pip install -e ".[pdf]"` |
+| + Compression | `pip install -e ".[pdf,compression]"` |
+| Everything | `pip install -e ".[all]"` |
 
-Base install (markdown and text processing only):
+---
 
-```bash
-pip install -e .
-```
+## Basic Usage
 
-With PDF support:
-
-```bash
-pip install -e ".[pdf]"
-```
-
-With optional compression:
-
-```bash
-pip install -e ".[pdf,compression]"
-```
-
-Everything:
-
-```bash
-pip install -e ".[all]"
-```
-
-## Install into a Project
-
-`install-to-project.sh` wires `doc-preprocessor` into another project by installing
-the CLI, registering the Claude Code skill, and injecting the pre-run hook instructions
-into that project's `CLAUDE.md` and `AGENTS.md`.
-
-Install into the current directory:
-
-```bash
-./install-to-project.sh
-```
-
-Install into a specific project:
-
-```bash
-./install-to-project.sh /path/to/your/project
-```
-
-Install CLI and skill globally without touching any project:
-
-```bash
-./install-to-project.sh --global
-```
-
-The script also appends `.skill_work/` to the target project's `.gitignore` (idempotent).
-
-## Quick Start
-
-Process one file:
+Process a single file:
 
 ```bash
 doc-preprocess input.md
 ```
 
-Default output:
+Output lands in `outputs/input.cleaned.md` by default.
 
-- `input.cleaned.md`
-
-Write all artifacts:
+Write all artifacts (diff, chunks, full report):
 
 ```bash
 doc-preprocess input.md --all-artifacts
 ```
 
-## Output Files
-
-When `--all-artifacts` is enabled, the tool writes:
-
-- `input.extracted.md` (raw extracted text)
-- `input.cleaned.md` (deterministically cleaned text)
-- `input.chunks.json` (structure-aware chunks)
-- `input.report.json` (metrics, logs, warnings, audit data)
-- `input.diff.md` (line-by-line diff: extracted vs cleaned)
-
-## Batch Processing
-
-Process a directory:
+Process a whole directory:
 
 ```bash
 doc-preprocess --input-dir ./docs --pattern "**/*" --workers 4
 ```
 
-Process explicit files:
+---
+
+## What Gets Written
+
+By default, only the cleaned file is written. Pass `--all-artifacts` to get everything:
+
+| File | Contents |
+|---|---|
+| `*.cleaned.md` | Cleaned text — the one to send to the LLM |
+| `*.extracted.md` | Raw extracted text before cleaning |
+| `*.chunks.json` | Structure-aware chunks for retrieval |
+| `*.report.json` | Metrics, warnings, and audit data |
+| `*.diff.md` | Line-by-line diff of extracted vs cleaned |
+
+Batch runs also write a `batch_report.json` summary.
+
+---
+
+## Pre-Run Hook (for AI agents)
+
+When a Claude or Codex skill needs clean inputs, run the hook first:
 
 ```bash
-doc-preprocess a.md b.txt c.pdf --workers 4
-```
-
-Batch report:
-
-- `batch_report.json`
-
-## Skills Pre-Run Hook
-
-Use the hook when a Codex or Claude skill needs cleaned document inputs before it runs.
-
-Process declared files:
-
-```bash
+# Single file
 doc-preprocess-hook notes.md transcript.pdf
-```
 
-Process a directory:
-
-```bash
+# Directory
 doc-preprocess-hook ./docs --pattern "**/*"
 ```
 
-Default hook output:
+The hook writes cleaned files and a `hook_summary.json`. It skips files it already generated (`.cleaned.md`, `.chunks.json`, etc.) so re-runs are safe.
 
-- cleaned files
-- `hook_summary.json`
+Use `--require-all-success` if the agent should stop when any input fails to process.
 
-The hook skips generated files such as `*.cleaned.md`, `*.chunks.json`, `*.report.json`, `*.extracted.md`, `*.diff.md`, and anything inside `.doc_preprocessor/`.
-
-Use `--require-all-success` when a skill should stop if any declared input fails.
+---
 
 ## Common Flags
 
-- `--all-artifacts`: write full artifact set
-- `--dry-run`: run processing but write no files
-- `--out-dir PATH`: set output directory
-- `--compress`: enable per-chunk compression
-- `--target-tokens N`: target token budget for compression
-- `--compression-ratio R`: compression ratio hint
-- `--max-chunk-tokens N`: max tokens per chunk before safe splitting
-- `--fail-fast`: best-effort early stop in batch mode
-- `--require-all-success`: hook mode returns failure if any declared input fails
-- `--max-file-mb N`: skip files larger than N MB in batch mode (`0` rejects all non-empty files)
-- `--aggressive-clean`: stronger deterministic cleanup
-- `--log-level LEVEL`: logging level (`DEBUG`, `INFO`, `WARNING`, ...)
+| Flag | What it does |
+|---|---|
+| `--out-dir PATH` | Where to write output (default: `outputs/` next to the input) |
+| `--all-artifacts` | Write every output file, not just the cleaned version |
+| `--dry-run` | Process but write nothing |
+| `--compress` | Compress output to reduce tokens further |
+| `--target-tokens N` | Token budget for compression |
+| `--compression-ratio R` | Compression strength hint |
+| `--max-chunk-tokens N` | Max tokens per chunk before splitting |
+| `--max-file-mb N` | Skip files larger than N MB (`0` rejects all non-empty files) |
+| `--aggressive-clean` | Stronger cleanup pass |
+| `--fail-fast` | Stop batch processing on first failure |
+| `--require-all-success` | Hook exits with failure if any input fails |
+| `--auto-install-deps` | Install missing runtime dependencies and retry |
+| `--log-level LEVEL` | `DEBUG`, `INFO`, `WARNING`, etc. |
 
-Dependency flags:
+Full flag reference: `doc-preprocess --help`
 
-- `--auto-install-deps`: opt in to allowlisted runtime dependency install + retry
-- `--no-auto-install-deps`: hard-disable runtime dependency install
-
-If both dependency flags are passed, CLI exits with code `2`.
+---
 
 ## Exit Codes
 
-- `0`: all files succeeded
-- `1`: one or more files failed
-- `2`: invalid CLI input/config
+| Code | Meaning |
+|---|---|
+| `0` | All files succeeded |
+| `1` | One or more files failed |
+| `2` | Bad arguments |
+
+---
 
 ## Troubleshooting
 
-If PDF processing fails, install (or reinstall) dependencies:
-
+**PDF processing fails:**
 ```bash
 pip install markitdown pymupdf
 ```
 
-If compression fails, install:
-
+**Compression fails:**
 ```bash
 pip install llmlingua
 ```
 
-For full flag help:
+---
 
-```bash
-doc-preprocess --help
+## Breaking Change in 0.2.0
+
+Output files moved from next to the input to an `outputs/` subdirectory.
+
 ```
+# Before 0.2.0
+input.md → input.cleaned.md
+
+# From 0.2.0
+input.md → outputs/input.cleaned.md
+```
+
+To get the old behavior: `doc-preprocess input.md --out-dir .`
