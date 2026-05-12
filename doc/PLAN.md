@@ -100,6 +100,8 @@ Runtime install execution:
 - process-wide lock + shared registry for attempted/success/failed packages
 - one retry per affected file
 - dry-run never installs; records "would install" event
+- `get_installed_version("pymupdf")` imports `fitz` (the PyMuPDF module name)
+- `importlib.invalidate_caches()` is called after a successful install so the package is importable in the same process
 
 ## Deterministic Processing Pipeline
 ### Cleaning (`clean.py`)
@@ -260,4 +262,4 @@ Implemented repo support files:
 
 ## Validation Status
 - Test suite is implemented and passing locally.
-- Current status: `46 passed`.
+- Current status: `55 passed`.
