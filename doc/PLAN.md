@@ -168,6 +168,11 @@ Fail-fast behavior:
 Batch report:
 - `batch_report.json` with totals, duration, throughput, failures, and per-file result rows
 
+Result ordering:
+- `ordered_results=True` (default): results returned in input-path sort order
+- `ordered_results=False`: results returned in completion-arrival order
+- `files_per_sec` is `inf` when batch duration rounds to 0ms with ≥1 success; `0.0` when nothing succeeded
+
 ### Collision-safe batch naming (implemented)
 To avoid overwrites when files share stem names:
 - batch stem defaults to `<stem>__<ext>` (e.g., `test__md`, `test__pdf`)
