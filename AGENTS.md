@@ -26,7 +26,7 @@ Claude compatibility:
 - `compress: false`
 - `aggressive_clean: false`
 - `auto_install_deps: false`
-- `max_file_mb: 100`
+- `max_file_mb: 100` (use `0` to reject all non-empty files)
 - `workers: 4`
 - `all_artifacts: false`
 - `require_all_success: false`
