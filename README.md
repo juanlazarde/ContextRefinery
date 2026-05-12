@@ -17,6 +17,24 @@ Supported input formats:
 - `.txt`
 - `.pdf`
 
+## Breaking Changes
+
+### 0.2.0
+
+**Default single-file output directory changed.**
+Output files now go to `<input_parent>/outputs/` instead of next to the input file.
+
+```bash
+# Before 0.2.0 — output appeared next to the input:
+# input.md → input.cleaned.md
+
+# From 0.2.0 — output goes to outputs/:
+# input.md → outputs/input.cleaned.md
+
+# To restore the old behavior:
+doc-preprocess input.md --out-dir .
+```
+
 ## Install
 
 Base install (markdown and text processing only):
