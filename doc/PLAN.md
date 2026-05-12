@@ -200,8 +200,8 @@ Skip rules:
 - skip anything inside `.doc_preprocessor/`
 
 Stable run IDs:
-- format: `<timestamp>_<hash8>`
-- hash is derived from normalized input paths and hook options
+- format: `<timestamp>_<uuid4_hex8>`
+- unique per call (random UUID suffix — not derived from inputs)
 
 Hook summary fields:
 - `run_id`
