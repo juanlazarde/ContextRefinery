@@ -61,6 +61,32 @@ Everything:
 pip install -e ".[all]"
 ```
 
+## Install into a Project
+
+`install-to-project.sh` wires `doc-preprocessor` into another project by installing
+the CLI, registering the Claude Code skill, and injecting the pre-run hook instructions
+into that project's `CLAUDE.md` and `AGENTS.md`.
+
+Install into the current directory:
+
+```bash
+./install-to-project.sh
+```
+
+Install into a specific project:
+
+```bash
+./install-to-project.sh /path/to/your/project
+```
+
+Install CLI and skill globally without touching any project:
+
+```bash
+./install-to-project.sh --global
+```
+
+The script also appends `.skill_work/` to the target project's `.gitignore` (idempotent).
+
 ## Quick Start
 
 Process one file:
