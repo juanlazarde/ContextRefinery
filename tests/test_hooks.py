@@ -97,6 +97,20 @@ def test_hook_all_artifacts(tmp_path: Path):
     assert (out_dir / "a__md.diff.md").exists()
 
 
+def test_run_id_unique_within_same_second():
+    from unittest.mock import patch
+    from doc_preprocessor.hooks import _build_run_id, SkillPreRunOptions
+
+    inputs = [Path("/tmp/a.md")]
+    opts = SkillPreRunOptions()
+
+    with patch("doc_preprocessor.hooks.strftime", return_value="20240101_120000"):
+        id1 = _build_run_id(inputs, opts)
+        id2 = _build_run_id(inputs, opts)
+
+    assert id1 != id2, "run_ids must be unique even within the same second with identical inputs"
+
+
 def test_hook_cli_invalid_no_inputs():
     assert cli([]) == 2
 

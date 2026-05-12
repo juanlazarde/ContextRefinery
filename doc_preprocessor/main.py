@@ -249,6 +249,7 @@ def run_pipeline_batch(
 
     sorted_paths = sorted(input_paths, key=lambda p: str(p)) if batch_options.ordered_results else list(input_paths)
     total = len(sorted_paths)
+    completion_order: list[Path] = []
     t0 = perf_counter()
 
     output_stems = _compute_output_stems(sorted_paths, batch_options.input_dir)
@@ -293,6 +294,7 @@ def run_pipeline_batch(
                     result = FileFailure(path=path, error=str(exc))
 
                 results_by_path[path] = result
+                completion_order.append(path)
 
                 if isinstance(result, FileFailure) and not batch_options.continue_on_error:
                     stop = True
@@ -327,12 +329,24 @@ def run_pipeline_batch(
                     dependency_events=[],
                 )
 
-    ordered_results = [results_by_path[p] for p in sorted_paths]
+    if batch_options.ordered_results:
+        final_order = sorted_paths
+    else:
+        arrived = set(completion_order)
+        skipped = [p for p in sorted_paths if p not in arrived]
+        final_order = completion_order + skipped
+
+    ordered_results = [results_by_path[p] for p in final_order]
     succeeded = sum(1 for r in ordered_results if isinstance(r, PipelineResult))
     failed = sum(1 for r in ordered_results if isinstance(r, FileFailure))
 
     duration_ms = int((perf_counter() - t0) * 1000)
-    files_per_sec = (succeeded / (duration_ms / 1000.0)) if duration_ms > 0 else float(succeeded)
+    if duration_ms > 0:
+        files_per_sec = succeeded / (duration_ms / 1000.0)
+    elif succeeded > 0:
+        files_per_sec = float("inf")
+    else:
+        files_per_sec = 0.0
 
     return BatchResult(
         total_files=total,
@@ -378,7 +392,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--max-file-mb",
         type=int,
         default=100,
-        help="Maximum input file size in MB before rejecting a file (batch mode).",
+        help="Maximum input file size in MB before rejecting a file (batch mode). Use 0 to reject all non-empty files; omit for no limit.",
     )
     parser.add_argument(
         "--compress",
@@ -641,10 +655,12 @@ def _print_single_summary(result: PipelineResult, dry_run: bool) -> None:
 
     print(f"Extracted tokens: {extracted_tokens}")
     print(f"Cleaned tokens: {cleaned_tokens}")
-    print(f"Cleaning reduction: {result.report.cleaning_reduction_percent:.2f}%")
+    pct = result.report.cleaning_reduction_percent
+    print(f"Cleaning reduction: {pct:.2f}%" if pct is not None else "Cleaning reduction: N/A")
     if compressed_tokens is not None:
         print(f"Compressed tokens: {compressed_tokens}")
-        print(f"Total reduction: {result.report.total_reduction_percent:.2f}%")
+        total_pct = result.report.total_reduction_percent
+        print(f"Total reduction: {total_pct:.2f}%" if total_pct is not None else "Total reduction: N/A")
 
     if dry_run:
         print("Dry-run: no files written")

@@ -1,7 +1,7 @@
 from pathlib import Path
 import json
 
-from doc_preprocessor.main import BatchOptions, FileFailure, PipelineOptions, cli, run_pipeline_batch
+from doc_preprocessor.main import BatchOptions, FileFailure, PipelineOptions, PipelineResult, cli, run_pipeline_batch
 from doc_preprocessor.ingest import PDF_DEP_ERROR, DocumentIngestor
 
 
@@ -215,3 +215,62 @@ def test_cleaned_batch_content_is_correct(tmp_path: Path):
     cleaned = (out_dir / "doc__md.cleaned.md").read_text(encoding="utf-8")
     assert "Hello" in cleaned
     assert "World" in cleaned
+
+
+def test_ordered_results_true_sorts_results_by_path(tmp_path: Path):
+    b = tmp_path / "b.md"
+    a = tmp_path / "a.md"
+    b.write_text("# B", encoding="utf-8")
+    a.write_text("# A", encoding="utf-8")
+
+    result = run_pipeline_batch(
+        [b, a],
+        PipelineOptions(dry_run=True),
+        BatchOptions(workers=1, ordered_results=True),
+    )
+    paths = [r.input_path for r in result.results if isinstance(r, PipelineResult)]
+    assert paths == sorted([a, b], key=str)
+
+
+def test_ordered_results_false_uses_arrival_order(tmp_path: Path, monkeypatch):
+    import time
+    from doc_preprocessor import main as main_module
+
+    a = tmp_path / "a.md"  # slow — b should complete first
+    b = tmp_path / "b.md"
+    a.write_text("# A", encoding="utf-8")
+    b.write_text("# B", encoding="utf-8")
+
+    orig = main_module._run_file_task
+
+    def controlled(path, opts, max_mb):
+        if path.name == "a.md":
+            time.sleep(0.05)
+        return orig(path, opts, max_mb)
+
+    monkeypatch.setattr(main_module, "_run_file_task", controlled)
+
+    result = run_pipeline_batch(
+        [a, b],
+        PipelineOptions(dry_run=True),
+        BatchOptions(workers=2, ordered_results=False),
+    )
+    paths = [r.input_path for r in result.results if isinstance(r, PipelineResult)]
+    assert paths == [b, a], f"Expected arrival order [b, a] but got {[p.name for p in paths]}"
+
+
+def test_files_per_sec_is_inf_when_instantaneous(tmp_path: Path, monkeypatch):
+    from doc_preprocessor import main as main_module
+
+    monkeypatch.setattr(main_module, "perf_counter", lambda: 0.0)
+
+    f = tmp_path / "a.md"
+    f.write_text("# Hello", encoding="utf-8")
+
+    result = run_pipeline_batch(
+        [f],
+        PipelineOptions(dry_run=True),
+        BatchOptions(workers=1),
+    )
+    assert result.succeeded == 1
+    assert result.files_per_sec == float("inf")

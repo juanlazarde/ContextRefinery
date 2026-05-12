@@ -16,6 +16,11 @@ ALLOWLIST_MAP = {
     "llmlingua": "llmlingua",
 }
 
+# Maps pip package name → importable module name (when they differ).
+_PACKAGE_TO_MODULE = {
+    "pymupdf": "fitz",
+}
+
 TAIL_LIMIT = 2000
 
 
@@ -67,8 +72,9 @@ def canonical_package(dep_key: str) -> str | None:
 
 
 def get_installed_version(package: str) -> str | None:
+    module_name = _PACKAGE_TO_MODULE.get(package, package)
     try:
-        mod = importlib.import_module(package)
+        mod = importlib.import_module(module_name)
     except Exception:
         return None
     return getattr(mod, "__version__", None)
@@ -153,6 +159,7 @@ def install_package(
     duration_ms = int((perf_counter() - t0) * 1000)
     success = proc.returncode == 0
     if success:
+        importlib.invalidate_caches()
         with registry.lock:
             registry.successful_packages.add(package)
     else:

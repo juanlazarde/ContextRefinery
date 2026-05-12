@@ -99,6 +99,20 @@ def test_unsupported_extension_raises(tmp_path: Path):
         ingestor.load(input_path)
 
 
+def test_print_single_summary_handles_none_cleaning_reduction(tmp_path: Path, capsys):
+    from doc_preprocessor.main import _print_single_summary
+
+    input_path = tmp_path / "input.md"
+    input_path.write_text("hello world", encoding="utf-8")
+    result = run_pipeline(input_path, PipelineOptions(out_dir=tmp_path / "out"))
+    result.report.cleaning_reduction_percent = None
+
+    _print_single_summary(result, dry_run=False)
+
+    out = capsys.readouterr().out
+    assert "Cleaning reduction" in out
+
+
 def test_timing_report_keys_present(tmp_path: Path):
     input_path = tmp_path / "input.md"
     input_path.write_text("# Title\n\nBody.\n", encoding="utf-8")

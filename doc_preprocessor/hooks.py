@@ -9,6 +9,7 @@ import json
 from pathlib import Path
 from time import strftime
 from typing import Any
+import uuid
 
 from .main import (
     BatchOptions,
@@ -148,7 +149,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--target-tokens", type=int, default=None, help="Target token budget for compression.")
     parser.add_argument("--compression-ratio", type=float, default=None, help="Compression ratio hint.")
     parser.add_argument("--max-chunk-tokens", type=int, default=None, help="Maximum tokens per chunk.")
-    parser.add_argument("--max-file-mb", type=int, default=100, help="Maximum file size in MB.")
+    parser.add_argument("--max-file-mb", type=int, default=100, help="Maximum file size in MB. Use 0 to reject all non-empty files.")
     parser.add_argument("--fail-fast", action="store_true", help="Best-effort early stop on failure.")
     parser.add_argument("--aggressive-clean", action="store_true", help="Use stronger deterministic cleanup.")
     parser.add_argument("--auto-install-deps", action="store_true", help="Opt in to allowlisted dependency install.")
@@ -234,12 +235,7 @@ def _should_process_file(path: Path) -> bool:
 
 
 def _build_run_id(inputs: list[Path], options: SkillPreRunOptions) -> str:
-    payload = {
-        "inputs": sorted(str(p.resolve()) for p in inputs),
-        "options": _options_summary(options),
-    }
-    digest = hashlib.sha1(json.dumps(payload, sort_keys=True).encode("utf-8")).hexdigest()[:8]
-    return f"{strftime('%Y%m%d_%H%M%S')}_{digest}"
+    return f"{strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
 
 
 def _cleaned_paths(batch_result: BatchResult) -> list[Path]:
