@@ -46,6 +46,7 @@ result = preprocess_for_skill(
 - No aggressive cleaning unless requested.
 - No dependency auto-install unless requested.
 - Do not scan entire repositories unless explicitly asked.
+- `--max-file-mb` defaults to `100` MB; use `0` to reject all non-empty files.
 
 ## SKILL.md Compatibility
 
